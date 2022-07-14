@@ -4,11 +4,11 @@
 #ifndef __INCLUDE_TCP_INPUT_PRIV_H__
 #define __INCLUDE_TCP_INPUT_PRIV_H__
 
+#include <cne_common.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <cne_common.h>
 
 enum tcp_input_next_nodes {
     TCP_INPUT_NEXT_PKT_DROP,
@@ -18,7 +18,7 @@ enum tcp_input_next_nodes {
 };
 
 /** Use TCP_INPUT_NEXT_MAX to call tcp_output in the cnet_tcp_input() */
-#define TCP_INPUT_NEXT_CHECK_OUTPUT TCP_INPUT_NEXT_MAX
+#define TCP_CHECK_OUTPUT_AND_DROP TCP_INPUT_NEXT_MAX
 
 #ifdef __cplusplus
 }

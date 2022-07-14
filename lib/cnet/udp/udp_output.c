@@ -37,7 +37,9 @@ udp_output_header(pktmbuf_t *m, uint16_t nxt)
     struct cnet_metadata *md;
     int16_t len;
 
-    md = cnet_mbuf_metadata(m);
+    md = pktmbuf_metadata(m);
+    if (!md)
+        return UDP_OUTPUT_NEXT_PKT_DROP;
 
     /* Build the UDP header */
     len           = sizeof(struct cne_udp_hdr);
@@ -207,6 +209,7 @@ udp_output_node_process(struct cne_graph *graph, struct cne_node *node, void **o
 
 static struct cne_node_register udp_output_node_base = {
     .process = udp_output_node_process,
+    .flags   = CNE_NODE_INPUT_F,
     .name    = UDP_OUTPUT_NODE_NAME,
 
     .nb_edges = UDP_OUTPUT_NEXT_MAX,

@@ -12,11 +12,11 @@
 
 #include <cne_atomic.h>
 
+#include <cne_common.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <cne_common.h>
 
 #define MS_PER_S 1000
 #define US_PER_S 1000000
@@ -57,7 +57,7 @@ cne_rdtsc(void)
 static inline uint64_t
 cne_rdtsc_precise(void)
 {
-    atomic_thread_fence(memory_order_release);
+    atomic_thread_fence(CNE_MEMORY_ORDER(release));
     return cne_rdtsc();
 }
 
