@@ -10,7 +10,7 @@
     //    description - (O) the description of the application
     "application": {
         "name": "pktfwd",
-        "description": "A simple packet forwarder"
+        "description": "A simple pktfwd application"
     },
 
     // (O) Default values
@@ -43,6 +43,7 @@
     //                  if not present or zero use defaults.rxdesc, normally zero.
     //    txdesc  - (O) Number of TX descriptors to be allocated in 1K increments,
     //                  if not present or zero use defaults.txdesc, normally zero.
+    //    shared_umem - (O) Set to true to use xsk_socket__create_shared() API, default false
     //    description | desc - (O) Description of the umem space.
     "umems": {
         "umem0": {
@@ -71,18 +72,27 @@
     //    qid           - (R) Is the queue id to use for this lport, defined by ethtool command line
     //    umem          - (R) The UMEM assigned to this lport
     //    region        - (O) UMEM region index value, default region 0
+    //    busy_poll     - (O) Enable busy polling support, true or false, default false
     //    busy_timeout  - (O) 1-65535 or 0 - use default value, values in milli-seconds
     //    busy_budget   - (O) -1 disabled, 0 use default, >0 budget value
-    //    load_bpf_prog - (O) load the BPF program if true
-    //    needs_wakeup  - (O) force TX wakeup calls for CVL NIC
+    //    unprivileged  - (O) inhibit loading the BPF program if true, default false
+    //    force_wakeup  - (O) force TX wakeup calls for CVL NIC, default false
+    //    skb_mode      - (O) Enable XDP_FLAGS_SKB_MODE when creating af_xdp socket, forces copy mode, default false
     //    description   - (O) the description, 'desc' can be used as well
     "lports": {
-        "enp134s0f0:0": {
+        "enp134s0:0": {
             "pmd": "net_af_xdp",
             "qid": 23,
             "umem": "umem0",
             "region": 0,
             "description": "LAN 0 port"
+        },
+        "enp134s0:1": {
+            "pmd": "net_af_xdp",
+            "qid": 33,
+            "umem": "umem0",
+            "region": 1,
+            "description": "LAN 1 port"
         }
     },
 
@@ -103,11 +113,14 @@
     //     The Key can be any string and value can be boolean, string, array or integer
     //     An array must contain only a single value type, boolean, integer, string and
     //     can't be a nested array.
+    //   pkt_api    - (O) Set the type of packet API xskdev or pktdev
     //   no-metrics - (O) Disable metrics gathering and thread
     //   no-restapi - (O) Disable RestAPI support
     //   cli        - (O) Enable/Disable CLI supported
     //   mode       - (O) Mode type [drop | rx-only], tx-only, [lb | loopback], fwd, acl-strict, acl-permissive
+    //   uds_path   - (O) Path to unix domain socket to get xsk map fd
     "options": {
+        "pkt_api": "pktdev",
         "no-metrics": false,
         "no-restapi": false,
         "cli": true,
@@ -123,6 +136,7 @@
     //      group  - (O) The lcore-group this thread belongs to. The
     //      lports - (O) The list of lports assigned to this thread and can not shared lports.
     //      description | desc - (O) The description
+    // NOTE: This section is not currently used in Rust CNE binding.
     "threads": {
         "main": {
             "group": "initial",
@@ -130,7 +144,7 @@
         },
         "fwd:0": {
             "group": "group0",
-            "lports": ["enp134s0f0:0"],
+            "lports": ["enp134s0:0"],
             "description": "Thread 0"
         }
     }

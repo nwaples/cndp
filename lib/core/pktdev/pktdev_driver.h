@@ -32,23 +32,22 @@ typedef int(pktdev_probe_t)(lport_cfg_t *cfg);
 /**
  * Remove function to remove a lport
  */
-typedef int(pktdev_remove_t)(int lport);
+typedef int(pktdev_remove_t)(struct cne_pktdev *dev);
 
 /**
  * A virtual device driver abstraction.
  */
 struct pktdev_driver {
-    TAILQ_ENTRY(pktdev_driver) next; /**< Next in list. */
+    TAILQ_ENTRY(pktdev_driver) next; /**< Next in list */
     const char *name;                /**< driver name */
-    pktdev_probe_t *probe;           /**< device probe function. */
-    pktdev_remove_t *remove;         /**< Remove routine */
+    pktdev_probe_t *probe;           /**< device probe function */
 };
 
 /**
  * Register a virtual device driver.
  *
  * @param driver
- *   A pointer to a cne_vdev_driver structure describing the driver
+ *   A pointer to a pktdev_driver structure describing the driver
  *   to be registered.
  */
 void pktdev_register(struct pktdev_driver *driver);
@@ -97,14 +96,6 @@ CNDP_API struct cne_pktdev *pktdev_allocate(const char *name, const char *ifname
  *  void
  */
 CNDP_API void _pktdev_reset(struct cne_pktdev *dev);
-
-/**
- * Tell pktdev from the driver the initialization is complete
- *
- * @param dev
- *   The internal pktdev structure pointer
- */
-CNDP_API void pktdev_create_done(struct cne_pktdev *dev);
 
 /**
  * Release the port or pktdev structure

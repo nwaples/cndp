@@ -17,8 +17,12 @@
 #include <pthread.h>        // for pthread_mutex_t, pthread_mutex_init, pthre...
 #include <stdint.h>         // for uint16_t, uint32_t
 #include <stdio.h>          // for FILE, NULL, size_t
-#include <bpf/xsk.h>        // for XSK_RING_CONS__DEFAULT_NUM_DESCS, xsk_ring...
-#include <net/if.h>         // for IF_NAMESIZE
+#if USE_LIBXDP
+#include <xdp/xsk.h>
+#else
+#include <bpf/xsk.h>
+#endif
+#include <net/if.h>        // for IF_NAMESIZE
 
 #include <cne_common.h>        // for CNDP_API, CNE_STD_C11
 #include <cne_lport.h>         // for lport_stats_t, buf_alloc_t, buf_free_t
@@ -127,7 +131,7 @@ typedef struct xskdev_info {
         __get_mbuf_addr_tx;               /**< Internal function to set the mbuf address on tx */
     xskdev_get_mbuf_rx_t __get_mbuf_rx;   /**< Internal function to get the mbuf address on rx */
     xskdev_pull_cq_addr_t __pull_cq_addr; /**< Internal function to pull the complete queue */
-
+    struct xdp_statistics orig_stats; /**< Internal XDP statistics structure of original stats */
 } xskdev_info_t;
 
 /**

@@ -16,6 +16,8 @@ project('CNDP', 'C', 'cpp',
     meson_version: '>= 0.53.2'
 )
 
+use_static_libs = get_option('default_library') == 'static'
+
 # set up some global vars for compiler, platform, configuration, etc.
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
@@ -92,21 +94,17 @@ endif
 add_project_link_arguments('-pthread', language: 'c')
 extra_ldflags += '-pthread'
 
+add_project_link_arguments('-lm', language: 'c')
+extra_ldflags += '-lm'
+
 # on Alpine, execinfo and backtrace are in a separate library
 if not cc.has_header('execinfo.h')
     error('Missing execinfo.h. Try installing "libexecinfo-dev".')
 endif
 
-if cc.find_library('libexecinfo', required : false).found()
+if dependency('libexecinfo', required : false, static : use_static_libs).found()
     add_project_link_arguments('-lexecinfo', language: 'c')
     extra_ldflags += '-lexecinfo'
-endif
-
-# on some OS, maths functions are in a separate library
-if cc.find_library('libm', required : false).found()
-    # some libs depend on maths lib
-    add_project_link_arguments('-lm', language: 'c')
-    extra_ldflags += '-lm'
 endif
 
 # if link_lib is empty, do not add it to project properties
@@ -115,7 +113,7 @@ extra_ldflags += '-ldl'
 
 # check for libraries used in multiple places in CNDP
 has_libnuma = 0
-numa_dep = cc.find_library('numa', required: false)
+numa_dep = dependency('numa', required: false, static: use_static_libs)
 if numa_dep.found() and cc.has_header('numaif.h')
     cne_conf.set10('CNE_HAS_LIBNUMA', true)
     has_libnuma = 1
@@ -124,14 +122,14 @@ if numa_dep.found() and cc.has_header('numaif.h')
 endif
 
 # check for libbsd
-libbsd = dependency('libbsd', required: true)
+libbsd = dependency('libbsd', required: true, static: use_static_libs)
 if libbsd.found()
     add_project_link_arguments('-lbsd', language: 'c')
     cne_conf.set('CNE_USE_LIBBSD', 1)
 endif
 
 # check for libjson-c
-json_c = dependency('json-c', required: true)
+json_c = dependency('json-c', required: true, static: use_static_libs)
 if json_c.found()
     add_project_link_arguments('-ljson-c', language: 'c')
     cne_conf.set('CNE_USE_JSON_C', 1)
@@ -139,36 +137,64 @@ if json_c.found()
 endif
 
 # Check for libpcap for txgen
-if cc.find_library('libpcap', required : true).found()
+pcap_dep = dependency('libpcap', required: true, static: use_static_libs)
+if pcap_dep.found()
     add_project_link_arguments('-lpcap', language: 'c')
     extra_ldflags += '-lpcap'
 endif
 
 add_project_arguments('-I/usr/include/libnl3', language: 'c')
 
-nl_dep = dependency('libnl-3.0', required: true, method: 'pkg-config')
+nl_dep = dependency('libnl-3.0', required: true, method: 'pkg-config', static: use_static_libs)
 if nl_dep.found()
     add_project_link_arguments('-lnl-3', language: 'c')
     extra_ldflags += '-lnl-3'
 endif
 
-nl_cli_dep = dependency('libnl-cli-3.0', required: true, method: 'pkg-config')
+nl_cli_dep = dependency('libnl-cli-3.0', required: true, method: 'pkg-config', static: use_static_libs)
 if nl_cli_dep.found()
     add_project_link_arguments('-lnl-cli-3', language: 'c')
     extra_ldflags += '-lnl-cli-3'
 endif
 
-nl_route_dep = dependency('libnl-route-3.0', required: true, method: 'pkg-config')
+nl_route_dep = dependency('libnl-route-3.0', required: true, method: 'pkg-config', static: use_static_libs)
 if nl_cli_dep.found()
     add_project_link_arguments('-lnl-route-3', language: 'c')
     extra_ldflags += '-lnl-route-3'
 endif
 
 cne_conf.set10('HAS_XSK_UMEM_SHARED', false)
-bpf_dep = dependency('libbpf', version: ['>=0.3.0', '<=0.6.1'], required: true, method: 'pkg-config')
-if bpf_dep.found() and cc.has_header('bpf/xsk.h') and cc.has_header('linux/if_xdp.h')
-    extra_ldflags += '-lbpf'
-    cne_conf.set10('HAS_XSK_UMEM_SHARED', true)
+cne_conf.set10('USE_LIBXDP', false)
+cne_conf.set10('USE_LIBBPF_8', false)
+xdp_dep = dependency('libxdp', version : '>=1.2.0', required: false, method: 'pkg-config', static: use_static_libs)
+bpf_dep = dependency('libbpf', required: false, method: 'pkg-config', static: use_static_libs)
+if not bpf_dep.found()
+    bpf_dep = cc.find_library('bpf', required: false)
+endif
+
+if cc.has_header('linux/if_xdp.h')
+    if xdp_dep.found() and cc.has_header('xdp/xsk.h')
+        if bpf_dep.found() and cc.has_header('bpf/bpf.h')
+            bpf_8_dep = dependency('libbpf', version : '>=0.8.0', required: false, method: 'pkg-config')
+            if bpf_8_dep.found()
+                cne_conf.set10('USE_LIBBPF_8', true)
+            endif
+            cne_conf.set10('USE_LIBXDP', true)
+            cne_conf.set10('HAS_XSK_UMEM_SHARED', true)
+            extra_ldflags += '-lbpf'
+            extra_ldflags += '-lxdp'
+        endif
+    else
+        if bpf_dep.found() and cc.has_header('bpf/xsk.h') and cc.has_header('bpf/bpf.h')
+        # libxdp not found. Rely solely on libbpf for xsk functionality
+        # which is only available in versions <= v0.6.0.
+            bpf_ver_dep = dependency('libbpf', version: ['>=0.3.0', '<=0.6.1'], required: true, method: 'pkg-config')
+            if bpf_ver_dep.found()
+                extra_ldflags += '-lbpf'
+                cne_conf.set10('HAS_XSK_UMEM_SHARED', true)
+            endif
+        endif
+    endif
 endif
 
 cne_conf.set('HAS_UINTR_SUPPORT', false)
@@ -179,8 +205,8 @@ if cc.has_argument('-muintr') and cc.get_id() == 'gcc' and cc.has_header('x86gpr
 endif
 
 # Check for libdlb
-libdlb = cc.find_library('dlb', required: false)
-if libdlb.found()
+dlb_dep = dependency('libdlb', required: false, method: 'pkg-config', static: use_static_libs)
+if dlb_dep.found()
     add_project_arguments('-DDLB2', language: 'c')
     add_project_arguments('-I/usr/local/include/dlb', language: 'c')
     add_project_link_arguments('-ldlb', language: 'c')
@@ -188,10 +214,12 @@ if libdlb.found()
     extra_ldflags += '-ldlb'
 endif
 
-
 # for clang 32-bit compiles we need libatomic for 64-bit atomic ops
 if cc.get_id() == 'clang'
-    atomic_dep = cc.find_library('atomic', required: true)
+    atomic_dep = dependency('atomic', required: false, method: 'pkg-config', static: use_static_libs)
+    if not atomic_dep.found()
+        atomic_dep = cc.find_library('atomic', required: true)
+    endif
     add_project_link_arguments('-latomic', language: 'c')
     extra_ldflags += '-latomic'
 endif

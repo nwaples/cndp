@@ -2,9 +2,10 @@
  * Copyright (c) 2020-2022 Intel Corporation.
  */
 
+use spin::{Mutex, MutexGuard};
 use std::mem::MaybeUninit;
 use std::os::raw::c_void;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use cne_sys::bindings::{
     _pktdev_rx_burst, _pktdev_tx_burst, _pktmbuf_alloc_bulk, _xskdev_rx_burst, _xskdev_tx_burst,
@@ -33,7 +34,7 @@ struct PortInner {
 unsafe impl Send for PortInner {}
 
 /// Port statistics.
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct PortStats {
     /// Total number of successfully received packets.
     pub in_packets: u64,
@@ -262,9 +263,21 @@ impl Port {
         cne.get_port_details(port.port_index)
     }
 
+    /// Get port index of the [port](Port).
+    ///
+    /// Returns port index in lports section of JSONC file or error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [CneError::PortError] if an error is encountered.
+    ///
+    pub fn get_port_index(&self) -> Result<u16, CneError> {
+        let port = self.lock()?;
+
+        Ok(port.port_index)
+    }
+
     fn lock(&self) -> Result<MutexGuard<PortInner>, CneError> {
-        self.inner
-            .lock()
-            .map_err(|e| CneError::PortError(e.to_string()))
+        Ok(self.inner.lock())
     }
 }

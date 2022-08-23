@@ -24,7 +24,7 @@
 
 #include "loop_test.h"
 #include "cne_common.h"          // for CNE_SET_USED, __cne_unused, cne_countof
-#include "pktdev_api.h"          // for pktdev_port_remove, pktdev_port_setup
+#include "pktdev_api.h"          // for pktdev_port_setup
 #include "cne_lport.h"           // for lport_cfg_t, lport_stats_t, LPORT_DFLT...
 #include "netdev_funcs.h"        // for netdev_link, netdev_get_link, netdev_s...
 #include "xskdev.h"              // for XSKDEV_DFLT_RX_NUM_DESCS, XSKDEV_DFLT_...
@@ -149,7 +149,7 @@ loop_main(int argc, char **argv)
     pktmbuf_t *mbufs[128];
     lport_cfg_t cfg;
     mmap_t *mmap = NULL;
-    int nb, num;
+    int nb, num, n;
 
     signal(SIGHUP, sig_handler);
     signal(SIGINT, sig_handler);
@@ -258,6 +258,8 @@ loop_main(int argc, char **argv)
         }
 
         num = pktdev_rx_burst(lport, mbufs, cne_countof(mbufs));
+        if (num == PKTDEV_ADMIN_STATE_DOWN)
+            goto leave;
         if (num == 0 || num > cne_countof(mbufs))
             continue;
 
@@ -266,6 +268,8 @@ loop_main(int argc, char **argv)
         else if (test_type == LOOPBACK_TEST) {
             while (num) {
                 nb = pktdev_tx_burst(lport, mbufs, num);
+                if (nb == PKTDEV_ADMIN_STATE_DOWN)
+                    goto leave;
 
                 num -= nb;
             }
@@ -285,7 +289,9 @@ loop_main(int argc, char **argv)
                     p[7]                 = 0x31307a79;
                     pktmbuf_data_len(xb) = 60;
                 }
-                pktdev_tx_burst(lport, mbufs, num);
+                n = pktdev_tx_burst(lport, mbufs, num);
+                if (n == PKTDEV_ADMIN_STATE_DOWN)
+                    goto leave;
             }
         } else if (test_type == L2FWD_TEST) {
             for (int i = 0; i < num; i++) {
@@ -304,6 +310,8 @@ loop_main(int argc, char **argv)
             }
             while (num) {
                 nb = pktdev_tx_burst(lport, mbufs, num);
+                if (nb == PKTDEV_ADMIN_STATE_DOWN)
+                    goto leave;
 
                 num -= nb;
             }
@@ -311,8 +319,8 @@ loop_main(int argc, char **argv)
     }
 
 leave:
-    if (pktdev_port_remove(lport) < 0)
-        tst_error("pktdev_port_remove(%d) failed\n", lport);
+    if (pktdev_close(lport) < 0)
+        tst_error("pktdev_close(%d) failed\n", lport);
 
     benchmark_done = true;
 

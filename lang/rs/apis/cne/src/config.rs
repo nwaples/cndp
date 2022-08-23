@@ -17,8 +17,8 @@ use std::result::Result;
 
 use cne_sys::bindings::{
     _pktmbuf_info_name_set, lport_cfg_t, mmap_addr, mmap_alloc, mmap_free, mmap_size, mmap_t,
-    mmap_type_by_name, pktdev_close, pktdev_port_remove, pktdev_port_setup, pktmbuf_destroy,
-    pktmbuf_info_t, pktmbuf_pool_create, uds_info_t, udsc_close, udsc_handshake, xskdev_info_t,
+    mmap_type_by_name, pktdev_close, pktdev_port_setup, pktmbuf_destroy, pktmbuf_info_t,
+    pktmbuf_pool_create, uds_info_t, udsc_close, udsc_handshake, xskdev_info_t,
     xskdev_socket_create, xskdev_socket_destroy, LPORT_BUSY_POLLING, LPORT_FORCE_WAKEUP,
     LPORT_SHARED_UMEM, LPORT_SKB_MODE, LPORT_UNPRIVILEGED, MEMPOOL_CACHE_MAX_SIZE,
 };
@@ -112,11 +112,11 @@ struct Options {
     uds_path: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct Thread {
-    group: Option<String>,
-    lport: Option<Vec<String>>,
-    description: Option<String>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Thread {
+    pub group: Option<String>,
+    pub lports: Option<Vec<String>>,
+    pub description: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -141,7 +141,7 @@ pub(crate) enum PktApi {
 }
 
 impl Config {
-    pub fn load_config(jsonc_file: &str) -> Result<Config, CneError> {
+    pub(crate) fn load_config(jsonc_file: &str) -> Result<Config, CneError> {
         // Read JSONC file.
         let contents =
             fs::read_to_string(jsonc_file).map_err(|e| CneError::ConfigError(e.to_string()))?;
@@ -164,11 +164,11 @@ impl Config {
     }
 
     #[cfg(test)]
-    pub fn get_config(cfg: &Config) -> Result<String, CneError> {
+    pub(crate) fn get_config(cfg: &Config) -> Result<String, CneError> {
         serde_json::to_string(cfg).map_err(|e| CneError::ConfigError(e.to_string()))
     }
 
-    pub fn setup(&mut self) -> Result<(), CneError> {
+    pub(crate) fn setup(&mut self) -> Result<(), CneError> {
         self.setup_mem_pool()?;
 
         self.setup_lports()?;
@@ -176,7 +176,7 @@ impl Config {
         Ok(())
     }
 
-    pub fn cleanup(&mut self) -> Result<(), CneError> {
+    pub(crate) fn cleanup(&mut self) -> Result<(), CneError> {
         self.cleanup_lports()?;
 
         self.cleanup_mem_pool()?;
@@ -184,7 +184,11 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_port_by_index(&self, port_index: u16) -> Result<Port, CneError> {
+    pub(crate) fn get_num_ports(&self) -> u16 {
+        self.lports.len() as u16
+    }
+
+    pub(crate) fn get_port_by_index(&self, port_index: u16) -> Result<Port, CneError> {
         self.validate_port_index(port_index)?;
 
         let (_, lport) = self.lports.get_index(port_index as usize).ok_or_else(|| {
@@ -201,12 +205,20 @@ impl Config {
         port
     }
 
-    pub fn get_port_by_name(&self, port_name: &str) -> Result<Port, CneError> {
+    #[allow(dead_code)]
+    // Keep this for future use.
+    pub(crate) fn get_port_by_name(&self, port_name: &str) -> Result<Port, CneError> {
+        let port_index = self.get_port_index_from_name(port_name)?;
+
+        self.get_port_by_index(port_index)
+    }
+
+    pub(crate) fn get_port_index_from_name(&self, port_name: &str) -> Result<u16, CneError> {
         let port_index = self.lports.get_index_of(port_name).ok_or_else(|| {
             CneError::ConfigError(format!("Port name {} is not present in config", port_name))
         })?;
 
-        self.get_port_by_index(port_index as u16)
+        Ok(port_index as u16)
     }
 
     pub(crate) fn get_port_details(&self, port_index: u16) -> Result<PortDetails, CneError> {
@@ -248,6 +260,15 @@ impl Config {
         Ok(pool)
     }
 
+    pub(crate) fn get_thread_details(&self) -> Result<HashMap<String, Thread>, CneError> {
+        let thread_details = self
+            .threads
+            .clone()
+            .ok_or_else(|| CneError::ConfigError("No threads present".to_string()))?;
+
+        Ok(thread_details)
+    }
+
     pub(crate) fn set_current_thread_affinity(&self, group: &str) -> Result<(), CneError> {
         let cpu_set = self.cpu_sets.get(group).ok_or_else(|| {
             CneError::ConfigError(format!("{} is not present in lcore-groups", group))
@@ -262,7 +283,7 @@ impl Config {
 
     fn validate_port_index(&self, port_index: u16) -> Result<(), CneError> {
         if port_index >= self.lports.len() as u16 {
-            let err_msg = format!("Invalid port {}", port_index);
+            let err_msg = format!("Invalid port index {}", port_index);
             Err(CneError::PortError(err_msg))
         } else {
             Ok(())
@@ -574,12 +595,6 @@ impl Config {
                         let ret = unsafe { pktdev_close(lport_id) };
                         if ret < 0 {
                             let err_msg = format!("pktdev_close() failed for lport {}", lport_name);
-                            return Err(CneError::ConfigError(err_msg));
-                        }
-                        let ret = unsafe { pktdev_port_remove(lport_id as i32) };
-                        if ret < 0 {
-                            let err_msg =
-                                format!("pktdev_port_remove() failed for lport {}", lport_name);
                             return Err(CneError::ConfigError(err_msg));
                         }
                     }

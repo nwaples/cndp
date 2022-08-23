@@ -2,16 +2,20 @@
  * Copyright (c) 2019-2022 Intel Corporation.
  */
 // IWYU pragma: no_include <asm/int-ll64.h>
-#include <errno.h>                // for ENODEV
-#include <stdlib.h>               // for NULL, calloc, free, size_t
-#include <string.h>               // for memset
-#include <poll.h>                 // for pollfd
-#include <net/if.h>               // for if_nametoindex, IF_NAMESIZE
-#include <sys/socket.h>           // for AF_XDP, PF_XDP, SOL_XDP
-#include <bsd/string.h>           // for strlcpy
-#include <stdint.h>               // for uint16_t, uint64_t
-#include <linux/bpf.h>            // for XDP_PACKET_HEADROOM
-#include <bpf/xsk.h>              // for XSK_RING_CONS__DEFAULT_NUM_DESCS, xsk_...
+#include <errno.h>             // for ENODEV
+#include <stdlib.h>            // for NULL, calloc, free, size_t
+#include <string.h>            // for memset
+#include <poll.h>              // for pollfd
+#include <net/if.h>            // for if_nametoindex, IF_NAMESIZE
+#include <sys/socket.h>        // for AF_XDP, PF_XDP, SOL_XDP
+#include <bsd/string.h>        // for strlcpy
+#include <stdint.h>            // for uint16_t, uint64_t
+#include <linux/bpf.h>         // for XDP_PACKET_HEADROOM
+#if USE_LIBXDP
+#include <xdp/xsk.h>
+#else
+#include <bpf/xsk.h>        // for XSK_RING_CONS__DEFAULT_NUM_DESCS, xsk_...
+#endif
 #include <net/ethernet.h>         // for ether_addr
 #include <cne_common.h>           // for CNE_PRIORITY_LAST
 #include <cne_log.h>              // for CNE_LOG, CNE_LOG_DEBUG, CNE_LOG_ERR
@@ -135,6 +139,8 @@ pmd_dev_close(struct cne_pktdev *dev)
     if (lport->xi)
         xskdev_socket_destroy(lport->xi);
 
+    free(dev->data->dev_private);
+
     dev->data->mac_addr = NULL;
 }
 
@@ -156,6 +162,14 @@ static const struct pktdev_ops ops = {
     .stats_reset   = pmd_stats_reset,
     .pkt_alloc     = pmd_pkt_alloc,
 };
+
+static int pmd_af_xdp_probe(lport_cfg_t *c);
+
+static struct pktdev_driver af_xdp_drv = {
+    .probe = pmd_af_xdp_probe,
+};
+
+PMD_REGISTER_DEV(net_af_xdp, af_xdp_drv);
 
 static struct cne_pktdev *
 init_lport(lport_cfg_t *c)
@@ -188,6 +202,7 @@ init_lport(lport_cfg_t *c)
     dev = pktdev_allocate(c->name, c->ifname);
     if (dev == NULL)
         CNE_ERR_GOTO(err_exit, "pktdev_allocate(%s, %s) failed\n", c->name, c->ifname);
+    dev->drv = &af_xdp_drv;
 
     dev->data->dev_private = lport;
     dev->data->mac_addr    = &lport->eth_addr;
@@ -227,36 +242,5 @@ pmd_af_xdp_probe(lport_cfg_t *c)
     if (!dev)
         CNE_ERR_RET("Failed to init lport\n");
 
-    pktdev_create_done(dev);
-
     return pktdev_portid(dev);
 }
-
-static int
-pmd_af_xdp_remove(int pid)
-{
-    struct cne_pktdev *dev = NULL;
-    char name[64]          = {0};
-
-    CNE_LOG(DEBUG, "Removing AF_XDP\n");
-
-    if (pktdev_get_name_by_port(pid, name, sizeof(name)) < 0)
-        return -ENODEV;
-
-    /* find the device entry */
-    dev = pktdev_allocated(name);
-    if (dev == NULL)
-        return -1;
-
-    pktdev_release_port(dev);
-
-    memset(dev, 0, sizeof(struct cne_pktdev));
-    return 0;
-}
-
-static struct pktdev_driver af_xdp_drv = {
-    .probe  = pmd_af_xdp_probe,
-    .remove = pmd_af_xdp_remove,
-};
-
-PMD_REGISTER_DEV(net_af_xdp, af_xdp_drv);

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause
- * Copyright (c) <2019-2020>, Intel Corporation. All rights reserved.
+ * Copyright (c) 2019-2022 Intel Corporation.
  */
 
 // IWYU pragma: no_include <bits/getopt_core.h>
@@ -312,12 +312,6 @@ general_tests(const char *ifname, const char *pmd)
         goto leave;
     } else
         tst_ok("PASS --- TEST: pktdev close success\n");
-
-    if (pktdev_port_remove(lport)) {
-        tst_error("ERROR - Could not remove the lport\n");
-        goto leave;
-    } else
-        tst_ok("PASS --- TEST: pktdev remove success\n");
 
     lport = -1;
     sleep(1);

@@ -19,11 +19,12 @@
 //! Checkout [examples](https://github.com/CloudNativeDataPlane/cndp/tree/main/lang/rs/apis/cne/examples)
 //! Also see the crate documentation.
 
-pub(crate) mod config;
+pub mod config;
 pub mod error;
 pub mod instance;
 pub mod packet;
 pub mod port;
+pub mod port_tx_buff;
 mod util;
 
 #[cfg(test)]
@@ -115,6 +116,10 @@ mod tests {
         // Configure CNE.
         let ret = cne.configure(&jsonc_file);
         assert!(ret.is_ok());
+
+        // Get num ports.
+        let num_ports = cne.get_num_ports();
+        assert!(num_ports.is_ok());
 
         // Get valid port. Should return success.
         let port = cne.get_port(0);

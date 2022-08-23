@@ -7,9 +7,7 @@ members = [
     "bindings/cne-sys",
     "apis/cne",
     "apis/cne/examples/loopback",
-    "examples/echo_server"
-]
-exclude = [
-    "examples/pktfwd"
+    "examples/echo_server",
+    "examples/fwd"
 ]
 

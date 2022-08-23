@@ -47,7 +47,11 @@ pktdev_port_setup(lport_cfg_t *c)
         CNE_ERR_RET("PMD %s probe routine missing\n", c->pmd_name);
 
     if ((lport = drv->probe(c)) < 0)
-        CNE_ERR_RET("driver probe(%s:%s) failed %d \n", c->ifname, c->pmd_name, lport);
+        CNE_ERR_RET("driver probe(%s:%s) failed\n", c->ifname, c->pmd_name);
+
+    if (lport >= CNE_MAX_ETHPORTS)
+        CNE_ERR_RET("Invalid port number %d >= CNE_MAX_ETHPORTS\n", lport);
+    pktdev_devices[lport].state = PKTDEV_ACTIVE;
 
     if (pktdev_start(lport) < 0)
         CNE_ERR_RET("pktdev_start(%d) failed\n", lport);
@@ -102,27 +106,6 @@ pktdev_offloads_get(uint16_t lport_id, struct offloads *off)
     return 0;
 }
 
-int
-pktdev_port_remove(int lport)
-{
-    struct pktdev_driver *drv;
-    char name[LPORT_NAME_LEN] = {0};
-    struct pktdev_info dev_info;
-
-    if (pktdev_get_name_by_port(lport, name, sizeof(name)) < 0)
-        return -1;
-
-    if (pktdev_info_get(lport, &dev_info) < 0)
-        return -1;
-
-    TAILQ_FOREACH (drv, &pktdev_drv_list, next) {
-        if (!strcmp(dev_info.driver_name, drv->name))
-            return drv->remove(lport);
-    }
-
-    return -1;        // Should only return success if drv->remove was successful
-}
-
 void
 lport_cfg_dump(FILE *f, lport_cfg_t *c)
 {
@@ -131,12 +114,10 @@ lport_cfg_dump(FILE *f, lport_cfg_t *c)
             f = stdout;
 
         cne_fprintf(f, "lport_cfg_t: %p\n", c);
-        cne_fprintf(f, "  name          : %s\n", c->name);
+        cne_fprintf(f, "  name            : %s\n", c->name);
         cne_fprintf(f, "  netdev          : %s\n", c->ifname);
         cne_fprintf(f, "  pmd_name        : %s\n", c->pmd_name);
         cne_fprintf(f, "  qid             : %u\n", c->qid);
-
-        cne_fprintf(f, "                    Rx/Tx values");
         cne_fprintf(f, "  bufcnt          : %u\n", c->bufcnt);
         cne_fprintf(f, "  bufsz           : %u\n", c->bufsz);
     }
